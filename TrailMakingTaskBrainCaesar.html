@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trail Making Test - Fixed Alternating Part B</title>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --start-color: #0033aa;
+            --end-color: #ff5500;
+            --normal-color: #17a2b8;
+            --line-color: #28a745;
+            --font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #app-container {
+            width: 100%;
+            max-width: 750px;
+            height: 750px;
+            background-color: var(--bg-color);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        /* Screen Layouts */
+        .screen {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            padding: 40px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+
+        .screen.active {
+            display: flex;
+        }
+
+        /* Typography */
+        h1 { font-size: 28px; font-weight: bold; color: #333333; margin-bottom: 20px; line-height: 1.3; }
+        p { font-size: 16px; line-height: 1.6; color: #444444; max-width: 550px; text-align: left; margin-bottom: 30px; }
+        
+        /* Buttons */
+        .btn {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            padding: 15px 35px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-start { background-color: #4CAF50; }
+        .btn-start:hover { background-color: #45a049; }
+        .btn-exit { background-color: #dc3545; }
+        .btn-exit:hover { background-color: #c82333; }
+
+        /* Game Canvas Area */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        canvas {
+            display: block;
+            background-color: var(--bg-color);
+        }
+
+        /* Modal Overlay for alerts to replace blocking Window Popups */
+        .modal {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            max-width: 80%;
+        }
+        .modal-title { font-size: 20px; font-weight: bold; margin-bottom: 15px; }
+        .modal-msg { font-size: 16px; margin-bottom: 20px; }
+        .modal-btn { background-color: #007bff; color: white; padding: 10px 25px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;}
+
+        /* Style tweaks for the final breakdown metrics */
+        .results-list {
+            text-align: left;
+            font-size: 18px;
+            line-height: 2;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+
+    <div id="instruction-screen" class="screen active">
+        <h1 id="instruction-title">Trail Making Test: Part B<br>(Trial 1 of 3)</h1>
+        <p>
+            <strong>Instructions:</strong><br><br>
+            Alternate tapping numbers and letters in ascending order:<br>
+            <strong>1 ➔ A ➔ 2 ➔ B ➔ 3 ➔ C ➔ 4 ➔ D ➔ 5 ➔ E ➔ 6 ➔ F ➔ 7 ➔ G ➔ 8 ➔ H</strong><br><br>
+            • Number '1' is colored Deep Blue.<br>
+            • Letter 'H' is colored Vibrant Orange.<br><br>
+            Your time and mistakes will be recorded per trial.<br>
+            Tap as quickly and accurately as you can.
+        </p>
+        <button class="btn btn-start" id="start-btn" onclick="startGame()">Begin Trial 1</button>
+    </div>
+
+    <div id="game-screen" class="screen" style="padding: 0;">
+        <div id="canvas-container">
+            <canvas id="gameCanvas" width="750" height="750"></canvas>
+        </div>
+    </div>
+
+    <div id="summary-screen" class="screen">
+        <h1>📊 Assessment Results Summary</h1>
+        <div class="results-list" id="results-display"></div>
+        <button class="btn btn-exit" onclick="location.reload()">Restart Test Program</button>
+    </div>
+
+    <div id="alert-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title" id="modal-title">Notification</div>
+            <div class="modal-msg" id="modal-msg">Message body goes here.</div>
+            <button class="modal-btn" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // Grids Configuration Matrices
+    const TRIAL_1_GRID = [
+        [1, 0, 0, 2, 0],
+        [0, 14, 0, 0, 3],
+        [15, 6, 0, 5, 4],
+        [7, 0, 12, 0, 11],
+        [8, 9, 16, 10, 13]
+    ];
+
+    const TRIAL_2_GRID = [
+        [0, 15, 0, 14, 13],
+        [1, 0, 6, 0, 12],
+        [2, 5, 0, 7, 0],
+        [0, 4, 0, 11, 8],
+        [3, 0, 16, 10, 9]
+    ];
+
+    const TRIAL_3_GRID = [
+        [16, 15, 14, 0, 0],
+        [9, 10, 13, 0, 1],
+        [8, 11, 12, 4, 2],
+        [7, 6, 5, 3, 0],
+        [0, 0, 0, 0, 0]
+    ];
+
+    const SEQUENCE = [
+        "1", "A", "2", "B", "3", "C", "4", "D",
+        "5", "E", "6", "F", "7", "G", "8", "H"
+    ];
+
+    // Colors
+    const START_COLOR = "#0033aa";
+    const END_COLOR = "#ff5500";
+    const NORMAL_COLOR = "#17a2b8";
+    const LINE_COLOR = "#28a745";
+    const NODE_RADIUS = 28;
+
+    // State variables
+    let currentTrialIndex = 1;
+    const maxTrials = 3;
+    const grids = { 1: TRIAL_1_GRID, 2: TRIAL_2_GRID, 3: TRIAL_3_GRID };
+    
+    let trialTimes = [];
+    let trialMistakes = [];
+    
+    let currentTargetIndex = 0;
+    let nodePositions = {}; // Map of sequence index to {x, y}
+    let lastClickedCoords = null;
+    let startTime = 0;
+    let currentTrialErrors = 0;
+    let modalCallback = null;
+
+    // Canvas setups
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function changeScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    function showInstructionScreen() {
+        document.getElementById('instruction-title').innerHTML = `Trail Making Test: Part B<br>(Trial ${currentTrialIndex} of ${maxTrials})`;
+        document.getElementById('start-btn').textContent = `Begin Trial ${currentTrialIndex}`;
+        changeScreen('instruction-screen');
+    }
+
+    function startGame() {
+        changeScreen('game-screen');
+        currentTargetIndex = 0;
+        currentTrialErrors = 0;
+        lastClickedCoords = null;
+        nodePositions = {};
+
+        // Reset canvas context
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const activeGrid = grids[currentTrialIndex];
+        const rows = activeGrid.length;
+        const cols = activeGrid[0].length;
+
+        const cellWidth = canvas.width / cols;
+        const cellHeight = canvas.height / rows;
+
+        // Calculate positions and parse values
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                const val = activeGrid[r][c];
+                if (val === 0) continue;
+
+                const xCenter = Math.floor((c * cellWidth) + (cellWidth / 2));
+                const yCenter = Math.floor((r * cellHeight) + (cellHeight / 2));
+                
+                const seqIdx = val - 1;
+                nodePositions[seqIdx] = { x: xCenter, y: yCenter, text: SEQUENCE[seqIdx], val: val };
+            }
+        }
+
+        renderCanvas();
+        startTime = performance.now();
+    }
+
+    function renderCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Draw connecting lines for progress made so far
+        if (currentTargetIndex > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = LINE_COLOR;
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            ctx.moveTo(nodePositions[0].x, nodePositions[0].y);
+            for (let i = 1; i < currentTargetIndex; i++) {
+                ctx.lineTo(nodePositions[i].x, nodePositions[i].y);
+            }
+            ctx.stroke();
+        }
+
+        // 2. Draw all nodes over lines
+        for (let idx in nodePositions) {
+            const node = nodePositions[idx];
+            let color = NORMAL_COLOR;
+            if (node.val === 1) color = START_COLOR;
+            if (node.val === 16) color = END_COLOR;
+
+            // Draw outer circle circle
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, NODE_RADIUS, 0, 2 * Math.PI);
+            ctx.fillStyle = color;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#333333';
+            ctx.stroke();
+
+            // Draw Label text
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 14px Helvetica';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(node.text, node.x, node.y);
+        }
+    }
+
+    // Handle click registration
+    canvas.addEventListener('mousedown', handleInteraction);
+    canvas.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const touch = e.touches[0];
+        handleInteraction({
+            clientX: touch.clientX,
+            clientY: touch.clientY
+        });
+    });
+
+    function handleInteraction(e) {
+        // Block actions if custom alert window layout is operational
+        if(document.getElementById('alert-modal').style.display === 'flex') return;
+
+        const rect = canvas.getBoundingClientRect();
+        // Project client offsets accurately inside explicit canvas coordinates context
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const clickX = (e.clientX - rect.left) * scaleX;
+        const clickY = (e.clientY - rect.top) * scaleY;
+
+        // Look for targeted node collisions
+        for (let idx in nodePositions) {
+            const node = nodePositions[idx];
+            const dist = Math.hypot(clickX - node.x, clickY - node.y);
+
+            if (dist <= NODE_RADIUS) {
+                processNodeSelection(parseInt(idx));
+                break;
+            }
+        }
+    }
+
+    function processNodeSelection(seqIdx) {
+        if (seqIdx < currentTargetIndex) return; // Ignore historic links
+
+        if (seqIdx === currentTargetIndex) {
+            currentTargetIndex++;
+            renderCanvas();
+
+            // Check for final completion target step ('H' at index 15)
+            if (seqIdx === SEQUENCE.length - 1) {
+                const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+                
+                trialTimes.push(parseFloat(duration));
+                trialMistakes.push(currentTrialErrors);
+
+                showAlert(
+                    `Trial ${currentTrialIndex} Complete`,
+                    `⏱️ Trial Time: ${duration} seconds<br>❌ Mistakes Made: ${currentTrialErrors}`,
+                    () => {
+                        if (currentTrialIndex < maxTrials) {
+                            currentTrialIndex++;
+                            showInstructionScreen();
+                        } else {
+                            showFinalResults();
+                        }
+                    }
+                );
+            }
+        } else {
+            // Incorrect node selection sequence path tracking
+            currentTrialErrors++;
+            const expectedItem = SEQUENCE[currentTargetIndex];
+            showAlert("Incorrect Target", `Wrong choice! Next correct target is: <strong>${expectedItem}</strong>`);
+        }
+    }
+
+    // Custom non-blocking modal system
+    function showAlert(title, msg, callback = null) {
+        document.getElementById('modal-title').innerHTML = title;
+        document.getElementById('modal-msg').innerHTML = msg;
+        document.getElementById('alert-modal').style.display = 'flex';
+        modalCallback = callback;
+    }
+
+    function closeModal() {
+        document.getElementById('alert-modal').style.display = 'none';
+        if (modalCallback) {
+            modalCallback();
+            modalCallback = null;
+        }
+    }
+
+    function showFinalResults() {
+        const grandTotalTime = trialTimes.reduce((a, b) => a + b, 0).toFixed(2);
+        const grandTotalErrors = trialMistakes.reduce((a, b) => a + b, 0);
+        const avgTime = (grandTotalTime / maxTrials).toFixed(2);
