@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
+    <title>Tower of London Task</title>
+    <style>
+        :root {
+            --bg-color: #ECEFF1;
+            --peg-color: #795548;
+            --base-color: #4E342E;
+            --text-main: #37474F;
+            --text-sub: #546E7A;
+            --accent-blue: #2196F3;
+            --accent-teal: #00897B;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: '-apple-system', BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            min-height: -webkit-fill-available; /* Fixes iOS Safari 100vh toolbar crop */
+            user-select: none;
+            -webkit-user-select: none;
+            overflow: hidden; /* Prevents bounce scrolling on iOS */
+        }
+
+        html {
+            height: -webkit-fill-available;
+        }
+
+        .game-container {
+            width: 100%;
+            max-width: 800px;
+            height: 100%;
+            max-height: 560px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .header-layout {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 0 10px;
+            box-sizing: border-box;
+            height: 120px;
+        }
+
+        .text-group {
+            text-align: left;
+        }
+
+        h1 { 
+            font-size: 24px; 
+            margin: 5px 0; 
+            color: var(--text-main); 
+            font-weight: bold; 
+        }
+
+        .instructions { 
+            font-size: 13px; 
+            color: var(--text-sub); 
+            margin: 2px 0; 
+            line-height: 1.4; 
+        }
+
+        .counter-status {
+            font-size: 15px;
+            font-weight: bold;
+            color: var(--accent-blue);
+            margin-top: 8px;
+        }
+
+        /* Interactive Canvas Engine */
+        #gameCanvas {
+            background-color: var(--bg-color);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            max-width: 100%;
+            touch-action: none; /* Crucial: Prevents iOS touch panning/zooming gestures on the canvas */
+        }
+
+        /* Control Tray */
+        .button-row {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            font-size: 14px;
+            font-weight: bold;
+            color: #ffffff;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 22px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            transition: background-color 0.2s;
+            -webkit-appearance: none; /* Resets iOS Safari native button styles */
+        }
+        .btn-start { background-color: var(--accent-blue); }
+        .btn-start:disabled { background-color: #b0bec5; cursor: not-allowed; box-shadow: none; }
+        .btn-reset { background-color: var(--accent-teal); }
+        .btn-reset:disabled { background-color: #b0bec5; cursor: not-allowed; box-shadow: none; }
+
+        /* Dialog Interlays */
+        .modal {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(55, 71, 79, 0.6);
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 8px;
+        }
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 6px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+            max-width: 80%;
+        }
+        .modal-title { font-size: 20px; font-weight: bold; margin-bottom: 12px; color: var(--text-main); }
+        .modal-msg { font-size: 15px; margin-bottom: 20px; color: var(--text-sub); line-height: 1.5; }
+        .modal-btn { background-color: var(--accent-blue); color: white; padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; -webkit-appearance: none;}
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <div class="header-layout">
+        <div class="text-group">
+            <h1>Tower of London</h1>
+            <div class="instructions">Tap a peg to lift its top block, then tap another peg to place it.</div>
+            <div class="instructions"><em>Rules: Move one block at a time. Match the specific Goal State pattern!</em></div>
+            <div id="counterStatus" class="counter-status">Press 'Start Game' to Begin!</div>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="340"></canvas>
+
+    <div class="button-row">
+        <button id="startBtn" class="btn btn-start" onclick="startGame()">Start Game</button>
+        <button id="resetBtn" class="btn btn-reset" onclick="resetGame()" disabled>Restart</button>
+    </div>
+
+    <div id="victoryModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-title">🏆 Goal Pattern Matched!</div>
+            <div class="modal-msg" id="modalMsg">Data breakdown metrics.</div>
+            <button class="modal-btn" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Task Configurations (Mirrors your precise Tkinter settings)
+    const NUM_DISKS = 4;
+    const PEG_X = [200, 400, 600];
+    const PEG_Y_BASE = 300;
+    const PEG_HEIGHT = 220;
+    const DISK_HEIGHT = 25;
+    const DISK_WIDTH = 120; // Uniform block width tracking Tower of London specification
+
+    // Colors mapping array indices exactly: 0=Red, 1=Blue, 2=Yellow, 3=Green, 4=Light Blue, 5=Purple
+    const DISK_COLORS = ["#E53935", "#0000FF", "#FDD835", "#43A047", "#1E88E5", "#3949AB"];
+
+    // Target Parameter Matrix
+    const TARGET_PEG = 2;
+    const TARGET_ORDER = [3, 1, 2, 0]; // Bottom-to-top layout configuration target
+
+    // State Variables
+    let pegsState = [[], [], []];
+    let movesCount = 0;
+    let gameActive = false;
+    let startTime = 0;
+    let selectedPeg = null;
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const counterStatus = document.getElementById('counterStatus');
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+
+    // Draw baseline initial frame setup
+    drawScene();
+
+    function startGame() {
+        gameActive = true;
+        startTime = performance.now();
+        movesCount = 0;
+        selectedPeg = null;
+        
+        // Populate standard initial stack: index descending [3, 2, 1, 0] on Peg 0
+        pegsState = [Array.from({length: NUM_DISKS}, (_, i) => NUM_DISKS - 1 - i), [], []];
+        
+        startBtn.disabled = true;
+        resetBtn.disabled = false;
+        updateStatus();
+        drawScene();
+    }
+
+    function resetGame() {
+        startGame();
+    }
+
+    function updateStatus() {
+        counterStatus.style.color = "var(--accent-blue)";
+        counterStatus.textContent = `Moves Made: ${movesCount}`;
+    }
+
+    function drawTargetPreview() {
+        // Upper right anchoring box limits matching original layout coordinates
+        const bx = 640, by = 15, bw = 140, bh = 105;
+
+        // Container card styling
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = "#B0BEC5";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, bw, bh);
+
+        // Header Label text inside target card
+        ctx.fillStyle = "#78909C";
+        ctx.font = "bold 10px Helvetica";
+        ctx.textAlign = "center";
+        ctx.fillText("GOAL STATE", bx + bw / 2, by + 16);
+
+        const miniBaseY = by + bh - 12;
+        const miniPegX = bx + 25 + (TARGET_PEG * 45);
+
+        // Draw Mini Platform base structures
+        ctx.fillStyle = "#4E342E";
+        ctx.fillRect(bx + 10, miniBaseY, bw - 20, 4);
+
+        // Draw Mini rods setup
+        ctx.fillStyle = "#795548";
+        for (let i = 0; i < 3; i++) {
+            const px = bx + 25 + (i * 45);
+            ctx.fillRect(px - 2, miniBaseY - 55, 4, 55);
+        }
+
+        // Draw target block arrangements in sequential z-index orders
+        const miniDiskH = 9;
+        const miniDiskW = 34;
+
+        for (let i = 0; i < TARGET_ORDER.length; i++) {
+            const colorIdx = TARGET_ORDER[i];
+            const mx = miniPegX - (miniDiskW / 2);
+            const my = miniBaseY - ((i + 1) * miniDiskH);
+
+            ctx.fillStyle = DISK_COLORS[colorIdx % DISK_COLORS.length];
+            ctx.fillRect(mx, my, miniDiskW, miniDiskH);
+
+            ctx.strokeStyle = "#212121";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(mx, my, miniDiskW, miniDiskH);
+        }
+    }
+
+    function drawScene() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw the blueprint layout objective reference target card context
+        drawTargetPreview();
+
+        // 1. Draw Task Platform Base
+        ctx.fillStyle = "#4E342E";
+        ctx.fillRect(100, PEG_Y_BASE, 600, 20);
+
+        // 2. Draw Main Interaction Peg Pillars
+        ctx.fillStyle = "#795548";
+        for (let i = 0; i < PEG_X.length; i++) {
+            const x = PEG_X[i];
+            ctx.fillRect(x - 8, PEG_Y_BASE - PEG_HEIGHT, 16, PEG_HEIGHT);
+
+            // Active structural column selections rendering highlight overlays
+            if (selectedPeg === i) {
+                ctx.strokeStyle = "#2196F3";
+                ctx.lineWidth = 3;
+                ctx.strokeRect(x - 14, PEG_Y_BASE - PEG_HEIGHT - 4, 28, PEG_HEIGHT + 8);
+            }
+        }
+
+        // 3. Draw Active Interaction Matrix Blocks stack layers
+        if (gameActive) {
+            for (let pegIdx = 0; pegIdx < pegsState.length; pegIdx++) {
+                const disks = pegsState[pegIdx];
+                for (let diskPos = 0; diskPos < disks.length; diskPos++) {
+                    const diskSize = disks[diskPos]; // Acts as unique ID preserving color values
+                    drawDisk(pegIdx, diskPos, diskSize);
+                }
+            }
+        }
+    }
+
+    function drawDisk(pegIdx, diskPos, diskSize) {
+        const xCenter = PEG_X[pegIdx];
+        const yBottom = PEG_Y_BASE - (diskPos * DISK_HEIGHT);
+
+        const x = xCenter - (DISK_WIDTH / 2);
+        const y = yBottom - DISK_HEIGHT;
+
+        ctx.fillStyle = DISK_COLORS[diskSize % DISK_COLORS.length];
+        ctx.fillRect(x, y, DISK_WIDTH, DISK_HEIGHT);
+
+        ctx.strokeStyle = "#212121";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, DISK_WIDTH, DISK_HEIGHT);
+    }
+
+    // Unified Event Listener for iOS, Android, and Desktop
+    canvas.addEventListener('pointerdown', handleInteraction);
+
+    function handleInteraction(e) {
+        if (!gameActive) return;
+
+        // Prevent pointer event from triggering scrolling / zooming behaviors on mobile
+        e.preventDefault();
+
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const clickX = (e.clientX - rect.left) * scaleX;
+
+        let targetPeg = null;
+        let minDistance = Infinity;
+
+        // Establish nearest structural peg column zone limit mapping parameters
+        for (let i = 0; i < PEG_X.length; i++) {
+            const dist = Math.abs(clickX - PEG_X[i]);
+            if (dist < minDistance && dist < 110) { 
+                minDistance = dist;
+                targetPeg = i;
+            }
+        }
+
+        if (targetPeg !== null) {
+            processPegSelection(targetPeg);
+        }
+    }
+
+    function processPegSelection(pegIdx) {
+        if (selectedPeg === null) {
+            // Source Peg State Definition pass window check
+            if (pegsState[pegIdx].length > 0) {
+                selectedPeg = pegIdx;
+                drawScene();
+            }
+        } else {
+            // Destination target placement pass processing 
+            const srcPeg = selectedPeg;
+            const destPeg = pegIdx;
+            selectedPeg = null; 
+
+            if (srcPeg !== destPeg) {
+                // Tower of London structural validation mechanics
+                pegsState[destPeg].push(pegsState[srcPeg].pop());
+                movesCount++;
+                updateStatus();
+
+                // Win validation evaluations
+                if (checkWinCondition()) {
+                    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+                    gameActive = false;
+                    startBtn.disabled = false;
+
+                    document.getElementById('modalMsg').innerHTML = 
+                        `Congratulations! You matched the target pattern in <strong>${movesCount}</strong> moves!<br>` +
+                        `Time taken: <strong>${elapsed}</strong> seconds.`;
+                    document.getElementById('victoryModal').style.display = 'flex';
+                }
+            }
+            drawScene();
+        }
+    }
+
+    function checkWinCondition() {
+        const targetPegStack = pegsState[TARGET_PEG];
+        if (targetPegStack.length !== TARGET_ORDER.length) return false;
+
+        for (let i = 0; i < TARGET_ORDER.length; i++) {
+            if (targetPegStack[i] !== TARGET_ORDER[i]) return false;
+        }
+        return true;
+    }
+
+    function closeModal() {
+        document.getElementById('victoryModal').style.display = 'none';
+        counterStatus.textContent = "Press 'Start Game' to Begin!";
+    }
+</script>
+
+</body>
+</html>
